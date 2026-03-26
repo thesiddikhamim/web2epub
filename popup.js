@@ -23,6 +23,8 @@ const uploadPreview = document.getElementById('uploadPreview');
 const uploadPreviewImg = document.getElementById('uploadPreviewImg');
 const uploadArea    = document.getElementById('uploadArea');
 const wikiOptions   = document.getElementById('wikiOptions');
+const defaultPreview = document.getElementById('defaultPreview');
+const defaultCanvas  = document.getElementById('defaultCoverCanvas');
 
 // ── State ────────────────────────────────────────────────────────────────────
 let currentTab = null;
@@ -72,11 +74,19 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('tab-' + tab).classList.add('active');
     activeTab = tab;
+    if (tab === 'default') updateDefaultPreview();
   });
 });
 
 // ── Cover URL preview ─────────────────────────────────────────────────────────
 let urlDebounce = null;
+titleInput.addEventListener('input', () => {
+  if (activeTab === 'default') updateDefaultPreview();
+});
+authorInput.addEventListener('input', () => {
+  if (activeTab === 'default') updateDefaultPreview();
+});
+
 coverUrlInput.addEventListener('input', () => {
   clearTimeout(urlDebounce);
   urlDebounce = setTimeout(async () => {
@@ -148,6 +158,10 @@ convertBtn.addEventListener('click', async () => {
   } else if (activeTab === 'upload' && coverFileData) {
     coverData = coverFileData.data;
     coverMime = coverFileData.mime;
+  } else if (activeTab === 'default') {
+    const defaultCover = await generateDefaultCover();
+    coverData = defaultCover.data;
+    coverMime = defaultCover.mime;
   }
 
   // Wikipedia options
@@ -516,6 +530,94 @@ function cropAndResizeCover(blob) {
     };
     img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('load fail')); };
     img.src = objUrl;
+  });
+}
+
+/**
+ * generateDefaultCover — creates a simple white cover with title and author.
+ * returns { data: Uint8Array, mime: 'image/jpeg' }
+ */
+async function generateDefaultCover() {
+  const canvas = defaultCanvas;
+  const ctx = canvas.getContext('2d');
+  const w = canvas.width;  // 600
+  const h = canvas.height; // 960
+
+  // Background
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, w, h);
+
+  const title  = titleInput.value.trim() || 'Untitled';
+  const author = authorInput.value.trim() || 'Unknown';
+
+  // Title (Top)
+  ctx.fillStyle = '#000000';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'top';
+  
+  // Use Lora if possible, fallback to serif
+  ctx.font = 'bold 54px "Lora", serif';
+  
+  const padding = 50;
+  const maxWidth = w - (padding * 2);
+  
+  function wrapText(text, x, y, maxWidth, lineHeight) {
+    const words = text.split(' ');
+    let line = '';
+    let testY = y;
+    for (let n = 0; n < words.length; n++) {
+      const testLine = line + words[n] + ' ';
+      const metrics = ctx.measureText(testLine);
+      const testWidth = metrics.width;
+      if (testWidth > maxWidth && n > 0) {
+        ctx.fillText(line, x, testY);
+        line = words[n] + ' ';
+        testY += lineHeight;
+      } else {
+        line = testLine;
+      }
+    }
+    ctx.fillText(line, x, testY);
+    return testY + lineHeight;
+  }
+
+  wrapText(title, w / 2, 140, maxWidth, 62);
+
+  // Author (Bottom)
+  ctx.font = '400 32px "DM Sans", sans-serif';
+  ctx.textBaseline = 'bottom';
+  ctx.fillText(author, w / 2, h - 140);
+
+  return new Promise((resolve) => {
+    canvas.toBlob(out => {
+      out.arrayBuffer().then(ab => {
+        resolve({ data: new Uint8Array(ab), mime: 'image/jpeg' });
+      });
+    }, 'image/jpeg', 0.9);
+  });
+}
+
+function updateDefaultPreview() {
+  generateDefaultCover().then(processed => {
+    const objUrl = URL.createObjectURL(new Blob([processed.data], { type: processed.mime }));
+    // Clear previous images but keep canvas hidden
+    const existingImgs = defaultPreview.querySelectorAll('img');
+    existingImgs.forEach(img => {
+      URL.revokeObjectURL(img.src);
+      img.remove();
+    });
+    
+    const img = document.createElement('img');
+    img.src = objUrl;
+    img.style.width = '100%';
+    img.style.height = '100%';
+    img.style.objectFit = 'contain';
+    
+    // Hide placeholder
+    const placeholder = defaultPreview.querySelector('.preview-placeholder');
+    if (placeholder) placeholder.style.display = 'none';
+    
+    defaultPreview.appendChild(img);
   });
 }
 

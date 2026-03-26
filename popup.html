@@ -50,6 +50,7 @@
         <div class="cover-tabs">
           <button class="tab-btn active" data-tab="url">Image URL</button>
           <button class="tab-btn" data-tab="upload">Upload File</button>
+          <button class="tab-btn" data-tab="default">Default</button>
         </div>
         <div class="tab-panel active" id="tab-url">
           <input type="url" id="coverUrl" placeholder="https://example.com/cover.jpg" />
@@ -69,6 +70,12 @@
           </div>
           <div class="cover-preview" id="uploadPreview" style="display:none;">
             <img id="uploadPreviewImg" src="" alt="Cover preview" />
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-default">
+          <div class="default-cover-preview" id="defaultPreview">
+            <canvas id="defaultCoverCanvas" width="600" height="960" style="display:none;"></canvas>
+            <div class="preview-placeholder">Simple white cover with title & author</div>
           </div>
         </div>
       </div>

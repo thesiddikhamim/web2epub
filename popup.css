@@ -220,6 +220,27 @@ input::placeholder { color: var(--text-dim); }
   font-style: italic;
 }
 
+.default-cover-preview {
+  height: 180px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin-top: 4px;
+  position: relative;
+  cursor: default;
+}
+
+.default-cover-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
 /* ── Upload Area ── */
 .upload-area {
   position: relative;
