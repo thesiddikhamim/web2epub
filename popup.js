@@ -91,11 +91,10 @@ coverUrlInput.addEventListener('input', () => {
       const resp = await fetch(url);
       if (!resp.ok) throw new Error('Could not load image');
       const blob = await resp.blob();
-      const mime = blob.type || 'image/jpeg';
-      const ab   = await blob.arrayBuffer();
-      coverUrlData = { data: new Uint8Array(ab), mime };
-      const objUrl = URL.createObjectURL(blob);
-      urlPreview.innerHTML = `<img src="${objUrl}" alt="Cover preview" style="width:100%;height:100%;object-fit:cover;"/>`;
+      const processed = await cropAndResizeCover(blob);
+      coverUrlData = processed;
+      const objUrl = URL.createObjectURL(new Blob([processed.data], { type: processed.mime }));
+      urlPreview.innerHTML = `<img src="${objUrl}" alt="Cover preview" style="width:100%;height:100%;object-fit:contain;"/>`;
     } catch(e) {
       urlPreview.innerHTML = '<span class="preview-placeholder" style="color:#e05c5c;">Could not load image</span>';
       coverUrlData = null;
@@ -107,9 +106,9 @@ coverUrlInput.addEventListener('input', () => {
 coverFileInput.addEventListener('change', () => {
   const file = coverFileInput.files[0];
   if (!file) return;
-  loadFileAsUint8Array(file).then(data => {
-    coverFileData = { data, mime: file.type || 'image/jpeg' };
-    const objUrl  = URL.createObjectURL(file);
+  cropAndResizeCover(file).then(processed => {
+    coverFileData = processed;
+    const objUrl  = URL.createObjectURL(new Blob([processed.data], { type: processed.mime }));
     uploadPreviewImg.src = objUrl;
     uploadPreview.style.display = 'flex';
     uploadArea.style.display    = 'none';
@@ -461,6 +460,63 @@ function showError(msg) {
 function hideError() {
   errorArea.style.display = 'none';
   errorMsg.textContent    = '';
+}
+
+/**
+ * cropAndResizeCover — ensures the cover image is exactly 1:1.6 (width:height).
+ * Performs a center-crop and optional downscale if the image is huge.
+ */
+function cropAndResizeCover(blob) {
+  return new Promise((resolve, reject) => {
+    const img    = new Image();
+    const objUrl = URL.createObjectURL(blob);
+    img.onload = () => {
+      URL.revokeObjectURL(objUrl);
+      const sw = img.naturalWidth;
+      const sh = img.naturalHeight;
+      if (!sw || !sh) { reject(new Error('zero-size')); return; }
+
+      const targetRatio = 1 / 1.6; // 0.625
+      const sourceRatio = sw / sh;
+
+      let cropW, cropH, startX, startY;
+
+      if (sourceRatio > targetRatio) {
+        // Source is wider than target (landscape-ish) -> crop the sides
+        cropH = sh;
+        cropW = sh * targetRatio;
+        startX = (sw - cropW) / 2;
+        startY = 0;
+      } else {
+        // Source is taller than target -> crop top/bottom
+        cropW = sw;
+        cropH = sw / targetRatio;
+        startX = 0;
+        startY = (sh - cropH) / 2;
+      }
+
+      // Final dimensions (scale down if too huge, but keep the 1:1.6 ratio)
+      let finalH = Math.min(cropH, 1600);
+      let finalW = finalH * targetRatio;
+
+      const canvas = document.createElement('canvas');
+      canvas.width  = finalW;
+      canvas.height = finalH;
+      const ctx = canvas.getContext('2d');
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(0, 0, finalW, finalH);
+      ctx.drawImage(img, startX, startY, cropW, cropH, 0, 0, finalW, finalH);
+
+      canvas.toBlob(out => {
+        if (!out) { reject(new Error('canvas fail')); return; }
+        out.arrayBuffer().then(ab => {
+          resolve({ data: new Uint8Array(ab), mime: 'image/jpeg' });
+        });
+      }, 'image/jpeg', 0.85);
+    };
+    img.onerror = () => { URL.revokeObjectURL(objUrl); reject(new Error('load fail')); };
+    img.src = objUrl;
+  });
 }
 
 // ── Utility ────────────────────────────────────────────────────────────────────

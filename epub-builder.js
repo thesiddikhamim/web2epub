@@ -177,7 +177,8 @@ const EpubBuilder = (() => {
     }
 
     // ── content.xhtml ──
-    const sanitizedHtml = sanitizeForXhtml(contentHtml);
+    const validPaths = images.map(img => img.localPath);
+    const sanitizedHtml = sanitizeForXhtml(contentHtml, validPaths);
     const contentXhtml = buildContentPage(title, author, sanitizedHtml, pageUrl, isWiki);
     zip.file('OEBPS/content.xhtml', contentXhtml);
 
@@ -355,7 +356,7 @@ ${imgManifest}
 
   <spine toc="ncx">
     ${coverSpine}
-    <itemref idref="nav" linear="no"/>
+    <itemref idref="nav" linear="yes"/>
     <itemref idref="content" linear="yes"/>
   </spine>
 
@@ -373,7 +374,8 @@ ${imgManifest}
       .replace(/</g, '&lt;')
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
-      .replace(/'/g, '&apos;');
+      .replace(/'/g, '&apos;')
+      .replace(/\u00A0/g, '&#160;'); // Also escape non-breaking space characters
   }
 
   /**
@@ -384,16 +386,35 @@ ${imgManifest}
    *  3. Extract only the <body> inner content (drop the full document wrapper).
    * Falls back to a lightweight regex pass if serialisation fails.
    */
-  function sanitizeForXhtml(html) {
+  /**
+   * Sanitize arbitrary HTML into well-formed XHTML suitable for embedding in an
+   * EPUB .xhtml document.  Uses a robust multi-pass approach:
+   *  1. Pre-process text to replace common named entities (&nbsp;) with numeric ones.
+   *  2. Parse as text/html (lenient) to fix unclosed tags and structure.
+   *  3. Import the corrected nodes into a fresh application/xhtml+xml document.
+   *  4. Serialize back to a string ensuring XML-compliant entities.
+   */
+  function sanitizeForXhtml(html, validImagePaths = null) {
+    // 1. Resolve named entities that XML doesn't know (&nbsp; -> &#160;)
+    // We only replace the most common one, but also do a general numeric pass.
+    html = (html || '')
+      .replace(/&nbsp;/g, '&#160;')
+      .replace(/&copy;/g, '&#169;')
+      .replace(/&reg;/g, '&#174;')
+      .replace(/&trade;/g, '&#8482;')
+      .replace(/&mdash;/g, '&#8212;')
+      .replace(/&ndash;/g, '&#8211;')
+      .replace(/&bull;/g, '&#8226;');
+
     try {
-      // Parse as HTML5 (lenient) so the browser corrects all malformed markup
       const parser = new DOMParser();
+      // Lenient HTML5 parse
       const doc = parser.parseFromString(
         `<!DOCTYPE html><html><head><meta charset="UTF-8"/></head><body>${html}</body></html>`,
         'text/html'
       );
 
-      // Remove script/style nodes that may have survived
+      // Remove script/style nodes
       doc.querySelectorAll('script, style, link[rel="stylesheet"]').forEach(el => el.remove());
 
       // Remove event handler attributes
@@ -403,43 +424,54 @@ ${imgManifest}
         });
       });
 
-      // Serialize the corrected DOM to XHTML
-      const serializer = new XMLSerializer();
+      // Fix broken image tags (referential integrity check for Play Books)
+      if (validImagePaths && Array.isArray(validImagePaths)) {
+        doc.querySelectorAll('img').forEach(img => {
+          const src = img.getAttribute('src');
+          if (src && src.startsWith('images/') && !validImagePaths.includes(src)) {
+            img.remove();
+          }
+        });
+      }
+
+      // Create a fresh XHTML document
       const xhtmlDoc = parser.parseFromString(
-        '<?xml version="1.0" encoding="UTF-8"?>' +
-        '<html xmlns="http://www.w3.org/1999/xhtml"><head></head><body>' +
-        doc.body.innerHTML +
-        '</body></html>',
+        '<?xml version="1.0" encoding="UTF-8"?><html xmlns="http://www.w3.org/1999/xhtml"><head></head><body></body></html>',
         'application/xhtml+xml'
       );
 
-      // Check for XML parse errors (XMLSerializer produces a parseerror doc on failure)
-      const parseError = xhtmlDoc.querySelector('parsererror');
-      if (parseError) {
-        // Fallback: just do basic escaping on the raw html
-        return basicXhtmlFallback(html);
-      }
+      // Import cleaned nodes from HTML doc to XHTML doc (safely transfers content characters)
+      const body = xhtmlDoc.body;
+      [...doc.body.childNodes].forEach(node => {
+        try { body.appendChild(xhtmlDoc.importNode(node, true)); } catch(e) {}
+      });
 
-      return serializer.serializeToString(xhtmlDoc.body)
-        .replace(/^<body[^>]*>/, '')    // strip outer <body ...>
-        .replace(/<\/body>$/, '');       // strip closing </body>
+      const serializer = new XMLSerializer();
+      const output = serializer.serializeToString(body);
+
+      // Strip <body> wrapper and return
+      return output
+        .replace(/^<body[^>]*>/, '')
+        .replace(/<\/body>$/, '');
+
     } catch (e) {
+      console.error('[sanitize] Parser failed, using fallback.', e);
       return basicXhtmlFallback(html);
     }
   }
 
   /**
-   * Lightweight fallback: fix the most common XHTML-breaking issues.
-   * Used when DOMParser/XMLSerializer are unavailable or fail.
+   * Lightweight fallback: fix common XHTML-breaking issues.
    */
   function basicXhtmlFallback(html) {
-    return html
-      // Fix unescaped & that are not already entities
+    return (html || '')
+      // Fix unescaped & that are not entities
       .replace(/&(?![a-zA-Z#][a-zA-Z0-9]*;)/g, '&amp;')
-      // Self-close void elements that XHTML requires self-closed
+      // Fix the most common missing-entity culprit
+      .replace(/&nbsp;/g, '&#160;')
+      // Self-close void elements
       .replace(/<(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)(\s[^>]*)?>(?!\/)/gi,
                '<$1$2/>')
-      // Remove any bare </br> or </hr> invalid close tags
       .replace(/<\/(br|hr|img|input|meta|link|area|base|col|embed|param|source|track|wbr)>/gi, '');
   }
 
