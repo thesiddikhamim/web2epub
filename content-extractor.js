@@ -20,6 +20,7 @@ function extractPageContent(options) {
     language:  document.documentElement.lang || 'en',
     html:      '',
     images:    [],  // [{originalSrc, localPath, mimeType}]
+    headings:  [],  // [{id, text, level}]
   };
 
   // ── Extract DOM ──────────────────────────────────────────────────────────────
@@ -92,6 +93,30 @@ function extractPageContent(options) {
     img.style.maxWidth = '100%';
     img.style.height   = 'auto';
   });
+
+  // ── Extract headings for TOC ────────────────────────────────────────────────
+  const headings = [];
+  container.querySelectorAll('h1, h2, h3, h4, h5, h6').forEach((h, i) => {
+    const text = (h.textContent || '').trim();
+    if (!text || text.length < 2) return;
+
+    // Skip headings that are likely part of nav/footer if they survived
+    if (h.closest('nav, footer, header, aside')) return;
+
+    // Ensure it has an ID for linking
+    let id = h.getAttribute('id');
+    if (!id) {
+      id = `epub_h_${i}`;
+      h.setAttribute('id', id);
+    }
+
+    headings.push({
+      id: id,
+      text: text,
+      level: parseInt(h.tagName.substring(1))
+    });
+  });
+  result.headings = headings;
 
   // ── Clean up remaining attributes ────────────────────────────────────────────
   container.querySelectorAll('[srcset]').forEach(el => el.removeAttribute('srcset'));
@@ -253,6 +278,12 @@ function extractGeneric() {
     '#content',
     '.content',
     '.main-content',
+    '.article__body',
+    '.article__content',
+    '.entry-body',
+    '.post__content',
+    '.page-content',
+    '.text-content',
   ];
 
   let best = null;
@@ -269,13 +300,22 @@ function extractGeneric() {
     }
   }
 
-  // Fallback: find the element with most text
+  // Fallback: find the element with most "article-like" content
   if (!best || bestScore < 200) {
-    let maxText = 0;
+    let maxScore = 0;
     document.querySelectorAll('div, section, article').forEach(el => {
-      const len = (el.textContent || '').trim().length;
-      if (len > maxText && len < 500000) {
-        maxText = len;
+      // Don't pick elements that are clearly not main content
+      if (el.matches('nav, footer, header, aside, .sidebar, #sidebar, .comments')) return;
+
+      const textLen = (el.textContent || '').trim().length;
+      if (textLen < 200 || textLen > 1000000) return;
+
+      // Scoring: text length + number of paragraphs
+      const pCount = el.querySelectorAll('p').length;
+      const score = textLen + (pCount * 50);
+
+      if (score > maxScore) {
+        maxScore = score;
         best = el;
       }
     });

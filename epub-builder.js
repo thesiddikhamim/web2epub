@@ -140,6 +140,7 @@ const EpubBuilder = (() => {
       coverData = null,
       coverMime = 'image/jpeg',
       isWiki = false,
+      headings = [],
     } = options;
 
     const zip = new JSZip();
@@ -189,10 +190,10 @@ const EpubBuilder = (() => {
     }
 
     // ── nav.xhtml (EPUB 3 navigation) ──
-    zip.file('OEBPS/nav.xhtml', buildNav(title, hasCover));
+    zip.file('OEBPS/nav.xhtml', buildNav(title, hasCover, headings));
 
     // ── toc.ncx (EPUB 2 compatibility) ──
-    zip.file('OEBPS/toc.ncx', buildNcx(uid, title, author, hasCover));
+    zip.file('OEBPS/toc.ncx', buildNcx(uid, title, author, hasCover, headings));
 
     // ── content.opf (package document) ──
     zip.file('OEBPS/content.opf',
@@ -249,23 +250,39 @@ const EpubBuilder = (() => {
 </html>`;
   }
 
-  function buildNav(title, hasCover) {
+  function buildNav(title, hasCover, headings = []) {
     const coverEntry = hasCover
       ? `<li><a href="cover.xhtml">Cover</a></li>`
       : '';
+
+    const headingEntries = headings.length > 0
+      ? `<ol>\n${headings.map(h => `        <li class="level-${h.level}"><a href="content.xhtml#${escXml(h.id)}">${escXml(h.text)}</a></li>`).join('\n')}\n      </ol>`
+      : '';
+
     return xmlDecl() + `
 <html xmlns="http://www.w3.org/1999/xhtml"
       xmlns:epub="http://www.idpf.org/2007/ops" xml:lang="en" lang="en">
 <head>
   <meta charset="UTF-8"/>
   <title>Navigation</title>
+  <style type="text/css">
+    nav ol { list-style-type: none; margin: 0; padding: 0; }
+    nav li { margin: 0.4em 0; }
+    nav li ol { margin-left: 1.5em; margin-top: 0.4em; }
+    nav li.level-1 { font-weight: bold; }
+    nav li.level-3 { font-size: 0.9em; margin-left: 1em; }
+    nav li.level-4, nav li.level-5, nav li.level-6 { font-size: 0.85em; margin-left: 2em; }
+  </style>
 </head>
 <body>
   <nav epub:type="toc" id="toc">
     <h1>Contents</h1>
     <ol>
       ${coverEntry}
-      <li><a href="content.xhtml">${escXml(title)}</a></li>
+      <li>
+        <a href="content.xhtml">${escXml(title)}</a>
+        ${headingEntries}
+      </li>
     </ol>
   </nav>
   <nav epub:type="landmarks">
@@ -277,7 +294,7 @@ const EpubBuilder = (() => {
 </html>`;
   }
 
-  function buildNcx(uid, title, author, hasCover) {
+  function buildNcx(uid, title, author, hasCover, headings = []) {
     let playOrder = 1;
     const coverPoint = hasCover ? `
     <navPoint id="cover" playOrder="${playOrder++}">
@@ -285,11 +302,17 @@ const EpubBuilder = (() => {
       <content src="cover.xhtml"/>
     </navPoint>` : '';
 
+    const headingPoints = headings.map(h => `
+    <navPoint id="${escXml(h.id)}" playOrder="${playOrder++}">
+      <navLabel><text>${escXml(h.text)}</text></navLabel>
+      <content src="content.xhtml#${escXml(h.id)}"/>
+    </navPoint>`).join('');
+
     return xmlDecl() + `
 <ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
   <head>
     <meta name="dtb:uid" content="${escXml(uid)}"/>
-    <meta name="dtb:depth" content="1"/>
+    <meta name="dtb:depth" content="2"/>
     <meta name="dtb:totalPageCount" content="0"/>
     <meta name="dtb:maxPageNumber" content="0"/>
   </head>
@@ -297,9 +320,10 @@ const EpubBuilder = (() => {
   <docAuthor><text>${escXml(author)}</text></docAuthor>
   <navMap>
     ${coverPoint}
-    <navPoint id="content" playOrder="${playOrder}">
+    <navPoint id="content" playOrder="${playOrder++}">
       <navLabel><text>${escXml(title)}</text></navLabel>
       <content src="content.xhtml"/>
+      ${headingPoints}
     </navPoint>
   </navMap>
 </ncx>`;

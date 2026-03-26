@@ -226,6 +226,7 @@ convertBtn.addEventListener('click', async () => {
       coverData,
       coverMime,
       isWiki:      extracted.isWiki,
+      headings:    extracted.headings || [],
     });
 
     setProgress(95, 'Preparing download...');
