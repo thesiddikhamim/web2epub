@@ -1,0 +1,25 @@
+{
+  "manifest_version": 3,
+  "name": "Web to EPUB Converter",
+  "version": "1.0.0",
+  "description": "Convert any webpage, Wikipedia article, or blog post into a well-formatted EPUB with images, citations, and references.",
+  "permissions": ["activeTab", "scripting", "downloads"],
+  "host_permissions": ["<all_urls>"],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Convert to EPUB",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

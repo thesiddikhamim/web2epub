@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Web to EPUB</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;1,400&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="popup.css" />
+</head>
+<body>
+  <div class="app">
+
+    <!-- Header -->
+    <header class="header">
+      <div class="header-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+          <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M9 7h7M9 11h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+      </div>
+      <div class="header-text">
+        <h1>Web to EPUB</h1>
+        <p class="subtitle">Save any page as an e-book</p>
+      </div>
+    </header>
+
+    <!-- Page info badge -->
+    <div class="page-badge">
+      <span class="page-badge-dot" id="pageDot"></span>
+      <span class="page-badge-label" id="pageLabel">Detecting page...</span>
+    </div>
+
+    <!-- Form -->
+    <div class="form-section">
+      <div class="field">
+        <label for="title">Title</label>
+        <input type="text" id="title" placeholder="Book title..." />
+      </div>
+
+      <div class="field">
+        <label for="author">Author</label>
+        <input type="text" id="author" placeholder="Author name..." />
+      </div>
+
+      <div class="field">
+        <label>Book Cover <span class="optional">(optional)</span></label>
+        <div class="cover-tabs">
+          <button class="tab-btn active" data-tab="url">Image URL</button>
+          <button class="tab-btn" data-tab="upload">Upload File</button>
+        </div>
+        <div class="tab-panel active" id="tab-url">
+          <input type="url" id="coverUrl" placeholder="https://example.com/cover.jpg" />
+          <div class="cover-preview" id="urlPreview">
+            <span class="preview-placeholder">Preview will appear here</span>
+          </div>
+        </div>
+        <div class="tab-panel" id="tab-upload">
+          <div class="upload-area" id="uploadArea">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+              <polyline points="17 8 12 3 7 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+              <line x1="12" y1="3" x2="12" y2="15" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+            </svg>
+            <span>Click or drag an image here</span>
+            <input type="file" id="coverFile" accept="image/*" />
+          </div>
+          <div class="cover-preview" id="uploadPreview" style="display:none;">
+            <img id="uploadPreviewImg" src="" alt="Cover preview" />
+          </div>
+        </div>
+      </div>
+
+      <!-- Wikipedia options (shown only on Wikipedia) -->
+      <div class="field wiki-only" id="wikiOptions" style="display:none;">
+        <label>Wikipedia Options</label>
+        <div class="checkbox-group">
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeRefs" checked />
+            <span>Include References &amp; Citations</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeInfobox" checked />
+            <span>Include Infobox</span>
+          </label>
+          <label class="checkbox-label">
+            <input type="checkbox" id="includeToc" checked />
+            <span>Include Table of Contents</span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- Progress area (hidden by default) -->
+    <div class="progress-area" id="progressArea" style="display:none;">
+      <div class="progress-bar-wrap">
+        <div class="progress-bar" id="progressBar"></div>
+      </div>
+      <p class="progress-label" id="progressLabel">Extracting content...</p>
+    </div>
+
+    <!-- Error area -->
+    <div class="error-area" id="errorArea" style="display:none;">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="1.8"/>
+        <line x1="12" y1="8" x2="12" y2="12" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <line x1="12" y1="16" x2="12.01" y2="16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"/>
+      </svg>
+      <span id="errorMsg"></span>
+    </div>
+
+    <!-- Convert button -->
+    <button class="convert-btn" id="convertBtn">
+      <span class="btn-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+          <path d="M12 2L2 7l10 5 10-5-10-5z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
+          <path d="M2 17l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M2 12l10 5 10-5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </span>
+      <span class="btn-text">Convert to EPUB</span>
+    </button>
+
+    <footer class="footer">
+      Images, tables &amp; references are embedded automatically
+    </footer>
+  </div>
+
+  <script src="jszip.min.js"></script>
+  <script src="epub-builder.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
